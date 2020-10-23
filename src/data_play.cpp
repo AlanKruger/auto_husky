@@ -12,7 +12,7 @@ int main(int argc, char **argv)
 	init(argc, argv, "bag_node");
 	NodeHandle nh;
 
-	string rosbag_cmd = "rosbag play /home/alan/particle_filtering.bag"; 
+	string rosbag_cmd = "rosbag play /home/$USER/particle_filtering.bag"; 
 	const char *command = rosbag_cmd.c_str(); 
 
 	cout << "Compiling file using " << command << endl; 

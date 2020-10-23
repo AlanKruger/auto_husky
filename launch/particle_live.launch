@@ -1,0 +1,6 @@
+<launch>
+	<include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find auto_husky)/rviz/particle_sim2.rviz"/>
+	<node pkg="auto_husky" type="particle_tracking" name="particle_tracking" output="screen">
+	</node>
+</launch>

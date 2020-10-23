@@ -1,6 +1,10 @@
 Installation:
 
-Under Construction...
+```console	
+$ cd ~/catkin_ws/src/auto_husky
+$ chmod +x install_dependencies.sh 
+$ ./install_dependencies.sh
+```
 
 Implementation:
 
@@ -20,6 +24,10 @@ Note: Velocity is still under construction
 ```console	
 $ roslaunch auto_husky particle_sim.launch
 ```
-Note: Greyscale particles are raw data. Rainbow particles are filtered particles. Filtetred particles are clustered together. White squares denote the center of each detected object cluster. Big green squares denote the nearest clusters (depending on number of prioritized objects selected).
 
-Note: Running with Velodyne drivers (using real sensor and not simulated data) is under construction
+4. Run particle_filtering with live LiDAR data:
+```console	
+$ roslaunch auto_husky particle_live.launch
+```
+
+Note: Greyscale particles are raw data. Rainbow particles are filtered particles. Filtetred particles are clustered together. White squares denote the center of each detected object cluster. Big green squares denote the nearest clusters (depending on number of prioritized objects selected).

@@ -10,6 +10,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl/filters/radius_outlier_removal.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <auto_husky/avoidance_input.h>
 
 #include <pcl/ModelCoefficients.h>
@@ -29,9 +30,13 @@ using namespace pcl;
 // Const Global Variables ////////////////////////
 
 //overall
-int const freq = 10;				// program frequency (Hz) 
-float const distance_limit = 10;		// limit the distance of the lidar (m)
+float const freq = 10;				// program frequency (Hz) 
+float const distance_limit = 10;		// limit the latitudinal distance of the lidar (m)
+float const side_roi = 0.5;			// limit the longitudinal distance of the lidar (m)
 int const num_objs = 2;				// number of objects to track
+float const movement_threshold = 0.3;		// maximum displacement between where an object can move between frames (m)
+float const static_threshold = 0.1;		// velocities below this value are essentially static (m/s)
+float const fast_threshold = 3;			// velocity of fast object (m/s)
 
 //filtering
 float const req_density_dist = 0.04;		// spacing between candidate points (m)
@@ -85,7 +90,7 @@ class Clouds
 				{
 			    		out_of_bounds_int++;
 				}
-				else if(temp_cloud->points[raw_idx].x > 0 && temp_cloud->points[raw_idx].x < distance_limit)
+				else if(temp_cloud->points[raw_idx].x > 0 && temp_cloud->points[raw_idx].x < distance_limit && temp_cloud->points[raw_idx].y > -side_roi && temp_cloud->points[raw_idx].y < side_roi)
 				{
 					// create vector with calibrated point cloud coordinates
 		
@@ -226,63 +231,117 @@ class Clouds
 class Cluster
 {
 	public:
-		visualization_msgs::Marker cluster_avg;					// 3D Object Cluster visualization (white squares)
-		visualization_msgs::Marker closest_objects;				// depending on number of objects (white spheres)
+		visualization_msgs::MarkerArray cluster_avg;				// 3D Object Cluster visualization (white squares)
 		vector<float> priority_distance;
 		vector<float> priority_velocity;
-
-		Cluster(void)
-		{
-			cluster_avg.header.frame_id = "velodyne";
-			cluster_avg.header.stamp = ros::Time();
-			cluster_avg.ns = "clusters";
-			cluster_avg.id = 0;
-			cluster_avg.type = visualization_msgs::Marker::POINTS;
-			cluster_avg.action = 0;
-			cluster_avg.scale.x = 0.08;
-			cluster_avg.scale.y = 0.08;
-			cluster_avg.scale.z = 0.08;
-			cluster_avg.color.a = 1.0;
-			cluster_avg.color.r = 1.0;
-			cluster_avg.color.g = 1.0;
-			cluster_avg.color.b = 1.0;
-			cluster_avg.frame_locked = true;
-
-			closest_objects.header.frame_id = "velodyne";
-			closest_objects.header.stamp = ros::Time();
-			closest_objects.ns = "objects";
-			closest_objects.id = 1;
-			closest_objects.type = visualization_msgs::Marker::POINTS;
-			closest_objects.action = 0;
-			closest_objects.scale.x = 0.15;
-			closest_objects.scale.y = 0.15;
-			closest_objects.scale.z = 0.15;
-			closest_objects.color.a = 1.0;
-			closest_objects.color.r = 0.0;
-			closest_objects.color.g = 1.0;
-			closest_objects.color.b = 0.0;
-			closest_objects.frame_locked = true;
-		}
+		vector<float> last_distance;
 
 		void update(vector<float> x_vec, vector<float> y_vec, vector<float> z_vec, int num_clusters, vector<float> d)
 		{
 			geometry_msgs::Point cluster_coor;
+			cluster_avg.markers.resize(num_clusters);
 			for(uint candidate_count = 0; candidate_count < num_clusters; candidate_count++)
 			{
+				cluster_avg.markers[candidate_count].points.clear();
+				cluster_avg.markers[candidate_count].header.frame_id = "velodyne";
+				cluster_avg.markers[candidate_count].header.stamp = ros::Time();
+				cluster_avg.markers[candidate_count].frame_locked = true;
+				cluster_avg.markers[candidate_count].ns = "clusters";
+				cluster_avg.markers[candidate_count].id = candidate_count;
+				cluster_avg.markers[candidate_count].type = visualization_msgs::Marker::POINTS;
+				cluster_avg.markers[candidate_count].action = 0;
+				cluster_avg.markers[candidate_count].color.a = 1.0;
+				cluster_avg.markers[candidate_count].lifetime = ros::Duration(1/freq);
+
 				cluster_coor.x = x_vec[candidate_count];
 				cluster_coor.y = y_vec[candidate_count];
 				cluster_coor.z = z_vec[candidate_count];
 				
 				if(candidate_count <= num_objs - 1)
 				{
-					closest_objects.points.push_back(cluster_coor);
+					cluster_avg.markers[candidate_count].points.push_back(cluster_coor);
 					priority_distance.push_back(d[candidate_count]);
-					priority_velocity.push_back(0);
+
+					float min_diff = distance_limit;
+					int min_idx = -1;
+					for(uint old_idx = 0; old_idx < last_distance.size(); old_idx++)
+					{
+						if(fabs(d[candidate_count] - last_distance[old_idx]) <= movement_threshold)
+						{
+							float diff = fabs(d[candidate_count] - last_distance[old_idx]);
+							if(min_diff > diff)
+							{
+								min_diff = diff;
+								min_idx = old_idx;
+							}
+						}
+					}
+					if(min_idx == -1)
+					{
+						priority_velocity.push_back(0);
+						cluster_avg.markers[candidate_count].scale.x = 0.25;
+						cluster_avg.markers[candidate_count].scale.y = 0.25;
+						cluster_avg.markers[candidate_count].scale.z = 0.25;
+						cluster_avg.markers[candidate_count].color.r = 0.0;
+						cluster_avg.markers[candidate_count].color.g = 1.0;
+						cluster_avg.markers[candidate_count].color.b = 0.0;
+					}
+					else
+					{
+						if(freq*min_diff > static_threshold)
+						{
+							priority_velocity.push_back(freq*min_diff);
+							cluster_avg.markers[candidate_count].scale.x = 0.25;
+							cluster_avg.markers[candidate_count].scale.y = 0.25;
+							cluster_avg.markers[candidate_count].scale.z = 0.25;
+							cluster_avg.markers[candidate_count].color.b = 0.0;
+							if(freq*min_diff > fast_threshold)
+							{
+								cluster_avg.markers[candidate_count].color.r = 1.0;
+								cluster_avg.markers[candidate_count].color.g = 0.0;
+							}
+							else
+							{
+								if(freq*min_diff < fast_threshold/2)
+								{
+									cluster_avg.markers[candidate_count].color.r = (freq*min_diff)/(fast_threshold/2);
+									cluster_avg.markers[candidate_count].color.g = 1.0;
+								}
+								else
+								{
+									cluster_avg.markers[candidate_count].color.g = (freq*min_diff)/(fast_threshold/2);
+									cluster_avg.markers[candidate_count].color.r = 1.0;
+								}
+
+							}
+						}
+						else
+						{
+							priority_velocity.push_back(0);
+							cluster_avg.markers[candidate_count].scale.x = 0.25;
+							cluster_avg.markers[candidate_count].scale.y = 0.25;
+							cluster_avg.markers[candidate_count].scale.z = 0.25;
+							cluster_avg.markers[candidate_count].color.r = 0.0;
+							cluster_avg.markers[candidate_count].color.g = 1.0;
+							cluster_avg.markers[candidate_count].color.b = 0.0;
+						}
+						last_distance.erase(last_distance.begin() + min_idx);
+					}
+					
 				}
 					
 				else
-					cluster_avg.points.push_back(cluster_coor);
+				{
+					cluster_avg.markers[candidate_count].points.push_back(cluster_coor);
+					cluster_avg.markers[candidate_count].scale.x = 0.08;
+					cluster_avg.markers[candidate_count].scale.y = 0.08;
+					cluster_avg.markers[candidate_count].scale.z = 0.08;
+					cluster_avg.markers[candidate_count].color.r = 1.0;
+					cluster_avg.markers[candidate_count].color.g = 1.0;
+					cluster_avg.markers[candidate_count].color.b = 1.0;
+				}
 			}
+			last_distance = priority_distance;
 		}
 } cluster_visualization;
 
@@ -292,8 +351,7 @@ void cloud_callback(const boost::shared_ptr<const sensor_msgs::PointCloud2>& raw
 {
 	// Clear and Initialize Vectors
 
-	cluster_visualization.cluster_avg.points.clear();
-	cluster_visualization.closest_objects.points.clear();
+	cluster_visualization.cluster_avg.markers.clear();
 	cluster_visualization.priority_distance.clear();
 	cluster_visualization.priority_velocity.clear();
 	CLOUD.clear_data();
@@ -317,7 +375,7 @@ void cloud_callback(const boost::shared_ptr<const sensor_msgs::PointCloud2>& raw
 	
 	CLOUD.sort_clusters();
 
-	// Visualize white square where object clusters are located
+//	// Visualize white square where object clusters are located
 
 	cluster_visualization.update(CLOUD.x_cluster_set, CLOUD.y_cluster_set, CLOUD.z_cluster_set, CLOUD.num_clusters, CLOUD.d_cluster_set); 
 }
@@ -331,15 +389,13 @@ int main(int argc, char **argv)
 
 	// Subscriber Declarations /////////////////////////////////
 	
-	const string lid_sub = "/velodyne_points";
-	Subscriber cloud_subscriber = nh.subscribe<sensor_msgs::PointCloud2>(lid_sub, 1, cloud_callback);
+	Subscriber cloud_subscriber = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 1, cloud_callback);
 	
 	// Publisher Declarations //////////////////////////////////
 	
-	Publisher vis_potential_pub = nh.advertise<visualization_msgs::Marker>("/potential_objects", 1);
-	Publisher vis_prioritized_pub = nh.advertise<visualization_msgs::Marker>("/prioritized_objects", 1);
-	Publisher raw_publisher = nh.advertise<sensor_msgs::PointCloud2>("raw_points", 1);
-	Publisher filter_publisher = nh.advertise<sensor_msgs::PointCloud2>("filter_points", 1);
+	Publisher vis_pub = nh.advertise<visualization_msgs::MarkerArray>("/objects", 1);
+	Publisher raw_publisher = nh.advertise<sensor_msgs::PointCloud2>("/raw_points", 1);
+	Publisher filter_publisher = nh.advertise<sensor_msgs::PointCloud2>("/filter_points", 1);
 	Publisher avoidance_pub = nh.advertise<auto_husky::avoidance_input>("/object_parameters", 1);
 	sensor_msgs::PointCloud2 output_cloud, output_filter;
 	auto_husky::avoidance_input input_msg;
@@ -370,8 +426,7 @@ int main(int argc, char **argv)
 		output_filter.header.frame_id = "velodyne";
 		filter_publisher.publish(output_filter);
 	 
-		vis_potential_pub.publish(cluster_visualization.cluster_avg);
-		vis_prioritized_pub.publish(cluster_visualization.closest_objects);
+		vis_pub.publish(cluster_visualization.cluster_avg);
 
 		input_msg.distance = cluster_visualization.priority_distance;
 		input_msg.velocity = cluster_visualization.priority_velocity;

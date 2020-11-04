@@ -1,0 +1,40 @@
+# SLAM Mapping Documentation
+
+1. Download dependencies:
+
+	$ mkdir -p ~/catkin_ws/ws1/src
+	$ cd ~/catkin_ws/ws1/src
+	$ catkin_init_workspace
+	$ git clone https://github.com/ethz-asl/libnabo.git
+	$ git clone https://github.com/ethz-asl/libpointmatcher.git
+	$ cd ..
+	$ catkin_make_isolated
+	$ source devel_isolated/setup.bash
+
+2. Before moving on, the dependencies should end on [2/2] completed (or similar)
+
+3. Now install Ethzasl-ICP-Mapper:
+
+	$ cd ..
+	$ cd src
+	$ git clone https://github.com/ethz-asl/ethzasl_icp_mapping.git
+	$ cd ..
+	$ catkin_make
+
+4. If successful, let's try it out:
+
+	In new terminal:
+
+		$ roscore
+
+	In new terminal:
+
+		$ roslaunch ethzasl_icp_mapper velodyne_puck__dynamic_mapper.launch 
+
+	In new terminal:
+
+		$ rviz
+
+	In new terminal:
+
+		S roslaunch velodyne_pointcloud VLP16_points.launch 	

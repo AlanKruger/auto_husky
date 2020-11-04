@@ -1,0 +1,5 @@
+<launch>
+	<include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch"/>
+	<include file="$(find ethzasl_icp_mapper)/launch/velodyne_puck/velodyne_puck__dynamic_mapper.launch"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find auto_husky)/rviz/mapping.rviz"/>
+</launch>

@@ -40,6 +40,6 @@ $ roslaunch auto_husky particle_live.launch
 
 Demo:
 
-<img src="images/particle_demo.png" raw=true width="400">
+<img src="images/particle_demo.png" raw=true width="800">
 
 Note: Greyscale particles are raw data. Rainbow particles are filtered particles. Filtetred particles are clustered together. Big squares denote the center of a detected cluster. They are color-coded from green to red such that green represents static or slow objects and red represents high velocity objects.

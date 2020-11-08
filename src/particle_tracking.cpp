@@ -1,4 +1,5 @@
-// This program preprocesses the LiDAR data to avoid excessive or corrupt data as well as localizes highly reflective clusters and packages the avg coordinates in a custom msg //
+// This program preprocesses the LiDAR data to avoid excessive or corrupt data as well as localizes highly reflective clusters 
+// and packages the avg coordinates into a custom msg. Output = /object_parameters rostopic
 
 #include <ros/ros.h>
 #include <cstdlib>
@@ -30,10 +31,10 @@ using namespace pcl;
 // Const Global Variables ////////////////////////
 
 //overall
+int const num_objs = 2;				// number of objects to track
 float const freq = 10;				// program frequency (Hz) 
 float const distance_limit = 10;		// limit the latitudinal distance of the lidar (m)
 float const side_roi = 0.5;			// limit the longitudinal distance of the lidar (m)
-int const num_objs = 2;				// number of objects to track
 float const movement_threshold = 0.3;		// maximum displacement between where an object can move between frames (m)
 float const static_threshold = 0.1;		// velocities below this value are essentially static (m/s)
 float const fast_threshold = 3;			// velocity of fast object (m/s)
@@ -55,44 +56,61 @@ PointCloud<pcl::PointXYZI>::Ptr filtered_cloud (new pcl::PointCloud<pcl::PointXY
 class Clouds
 {
 	private:
-		int good_points;
-		int nan_values;
-		int inf_values;
-		int out_of_bounds_int;
-		int intense_cloud_count;
+		int good_points;									// how many eligible points passed thresholding
+		int nan_values;										// how many Not-A-Number points were caught
+		int inf_values;										// how many infinite valued points were caught
+		int out_of_bounds_int;									// how many intensity values are outside 8-bits
+
 	public:
 		vector <float> x,y,z,intensity;								// temporary coordinate vectors
 		vector <float> x_cluster_set, y_cluster_set, z_cluster_set;				// 3D coordinates to be published
-		vector <float> d_cluster_set;
+		vector <float> d_cluster_set;								// euclidean distance vector for sorting
 		int num_clusters;									// number of clusters in current frame
+
+		// Constructor
 
 		Clouds(void)
 		{
+			// resets all private values upon construction
+
 			good_points = 0;
 			nan_values = 0;
 			inf_values = 0;
 			out_of_bounds_int = 0;
 		}
 
+		// Filter raw points into usable vector data within a region of interest
+
 		void get_ROI(PointCloud<PointXYZI>::Ptr temp_cloud)
 		{
 			for(uint raw_idx = 0; raw_idx <= temp_cloud->points.size(); raw_idx++)
 			{
+				// No Not-A-Number values please
+
 				if(isnan(temp_cloud->points[raw_idx].x) || isnan(temp_cloud->points[raw_idx].y) || isnan(temp_cloud->points[raw_idx].z) || isnan(temp_cloud->points[raw_idx].intensity))
 				{
 			    		nan_values++;
 				}
+
+				// No Infinite values please
+
 				else if(isinf(temp_cloud->points[raw_idx].x) || isinf(temp_cloud->points[raw_idx].y) || isinf(temp_cloud->points[raw_idx].z) || isinf(temp_cloud->points[raw_idx].intensity || fabs(temp_cloud->points[raw_idx].x) < 0.01 || fabs(temp_cloud->points[raw_idx].y) < 0.0001 || fabs(temp_cloud->points[raw_idx].z) < 0.0001))
 				{
 			    		inf_values++;
 				}
+
+				// No intensity values outside 8-bits please
+
 				else if(temp_cloud->points[raw_idx].intensity < 0 || temp_cloud->points[raw_idx].intensity > 255)
 				{
 			    		out_of_bounds_int++;
 				}
+
+				// No points outside region of interest please
+
 				else if(temp_cloud->points[raw_idx].x > 0 && temp_cloud->points[raw_idx].x < distance_limit && temp_cloud->points[raw_idx].y > -side_roi && temp_cloud->points[raw_idx].y < side_roi)
 				{
-					// create vector with calibrated point cloud coordinates
+					// create vector with filtered point cloud coordinates
 		
 					x.push_back(temp_cloud->points[raw_idx].x);
 					y.push_back(temp_cloud->points[raw_idx].y);
@@ -103,10 +121,14 @@ class Clouds
 			}
 		}
 
+		// Filter out stray points
+
 		void get_filtered_cloud(void)
 		{
 			if(good_points > 0)
 			{
+				// fill in new point cloud with valid data 
+
 				cloud->points.resize(good_points);
 				for(uint good_point_idx = 0; good_point_idx < good_points; good_point_idx++)
 				{
@@ -123,6 +145,8 @@ class Clouds
 				vg.setLeafSize (0.015f, 0.01f, 0.015f);
 				vg.filter (*filtered_cloud);
 
+				// filter out strays
+
 				pcl::RadiusOutlierRemoval<pcl::PointXYZI> outrem;
 				outrem.setInputCloud(filtered_cloud);
 				outrem.setRadiusSearch(req_density_dist);
@@ -131,13 +155,16 @@ class Clouds
 			}
 		}
 
+		// Group dense points and sort them in order of proximity
+
 		void sort_clusters(void)
 		{
 			if(good_points > 0)
 			{
+				// grouping points
+
 				pcl::search::KdTree<pcl::PointXYZI>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZI>);
 				tree->setInputCloud (filtered_cloud);
-
 				std::vector<pcl::PointIndices> cluster_indices;
 				pcl::EuclideanClusterExtraction<pcl::PointXYZI> ec;
 				ec.setClusterTolerance (object_separation); 
@@ -146,6 +173,8 @@ class Clouds
 				ec.setSearchMethod (tree);
 				ec.setInputCloud (filtered_cloud);
 				ec.extract (cluster_indices);
+
+				// find center (or average) of clusters
 
 				num_clusters = 0;
 				for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
@@ -162,12 +191,15 @@ class Clouds
 						y_cluster += filtered_cloud->points[*pit].y;
 						z_cluster += filtered_cloud->points[*pit].z;
 					}
-
 					x_cluster /= cloud_cluster->size ();
 					y_cluster /= cloud_cluster->size ();
 					z_cluster /= cloud_cluster->size ();
 
+					// find euclidean distance 
+
 					distance = pow(pow(x_cluster,2) + pow(y_cluster,2),0.5);
+
+					// sort from nearest to furthest euclidean distance
 
 					if(d_cluster_set.size() == 0)
 					{
@@ -199,15 +231,15 @@ class Clouds
 							z_cluster_set.push_back(z_cluster);
 						}
 					}
-
 					cloud_cluster->width = cloud_cluster->size ();
 					cloud_cluster->height = 1;
 					cloud_cluster->is_dense = true;
-
 					num_clusters++;
 				}
 			}
 		}
+
+		// clear data
 
 		void clear_data(void)
 		{
@@ -232,12 +264,16 @@ class Cluster
 {
 	public:
 		visualization_msgs::MarkerArray cluster_avg;				// 3D Object Cluster visualization (white squares)
-		vector<float> priority_distance;
-		vector<float> priority_velocity;
-		vector<float> last_distance;
+		vector<float> priority_distance;					// sorted euclidean distance vector 
+		vector<float> priority_velocity;					// sorted velocity vector
+		vector<float> last_distance;						// hold past localization values to see which objects are related to previous frame
+
+		// update visualization and tracking
 
 		void update(vector<float> x_vec, vector<float> y_vec, vector<float> z_vec, int num_clusters, vector<float> d)
 		{
+			// visualize big square as center of cluster
+
 			geometry_msgs::Point cluster_coor;
 			cluster_avg.markers.resize(num_clusters);
 			for(uint candidate_count = 0; candidate_count < num_clusters; candidate_count++)
@@ -252,16 +288,16 @@ class Cluster
 				cluster_avg.markers[candidate_count].action = 0;
 				cluster_avg.markers[candidate_count].color.a = 1.0;
 				cluster_avg.markers[candidate_count].lifetime = ros::Duration(1/freq);
-
 				cluster_coor.x = x_vec[candidate_count];
 				cluster_coor.y = y_vec[candidate_count];
 				cluster_coor.z = z_vec[candidate_count];
 				
+				// track object by comparing previous distances to see what a potential object could have done between frames
+
 				if(candidate_count <= num_objs - 1)
 				{
 					cluster_avg.markers[candidate_count].points.push_back(cluster_coor);
 					priority_distance.push_back(d[candidate_count]);
-
 					float min_diff = distance_limit;
 					int min_idx = -1;
 					for(uint old_idx = 0; old_idx < last_distance.size(); old_idx++)
@@ -276,6 +312,9 @@ class Cluster
 							}
 						}
 					}
+
+					// color code green as static object 
+
 					if(min_idx == -1)
 					{
 						priority_velocity.push_back(0);
@@ -286,8 +325,13 @@ class Cluster
 						cluster_avg.markers[candidate_count].color.g = 1.0;
 						cluster_avg.markers[candidate_count].color.b = 0.0;
 					}
+
+					// color code as yellow or red depending on velocity
+
 					else
 					{
+						// same object from last frame and has non-negligible velocity
+
 						if(freq*min_diff > static_threshold)
 						{
 							priority_velocity.push_back(freq*min_diff);
@@ -312,9 +356,11 @@ class Cluster
 									cluster_avg.markers[candidate_count].color.g = (freq*min_diff)/(fast_threshold/2);
 									cluster_avg.markers[candidate_count].color.r = 1.0;
 								}
-
 							}
 						}
+
+						// new object is given a velocity of 0 m/s
+
 						else
 						{
 							priority_velocity.push_back(0);
@@ -327,9 +373,10 @@ class Cluster
 						}
 						last_distance.erase(last_distance.begin() + min_idx);
 					}
-					
 				}
 					
+				// cluster is outside the number of trackable objects desired currently
+
 				else
 				{
 					cluster_avg.markers[candidate_count].points.push_back(cluster_coor);
@@ -341,6 +388,9 @@ class Cluster
 					cluster_avg.markers[candidate_count].color.b = 1.0;
 				}
 			}
+
+			// update past vector with current vector
+
 			last_distance = priority_distance;
 		}
 } cluster_visualization;
@@ -375,7 +425,7 @@ void cloud_callback(const boost::shared_ptr<const sensor_msgs::PointCloud2>& raw
 	
 	CLOUD.sort_clusters();
 
-//	// Visualize white square where object clusters are located
+	// Visualize white square where object clusters are located
 
 	cluster_visualization.update(CLOUD.x_cluster_set, CLOUD.y_cluster_set, CLOUD.z_cluster_set, CLOUD.num_clusters, CLOUD.d_cluster_set); 
 }

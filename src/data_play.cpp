@@ -12,8 +12,12 @@ int main(int argc, char **argv)
 	init(argc, argv, "bag_node");
 	NodeHandle nh;
 
+	// Enters this string into a terminal automatically
+
 	string rosbag_cmd = "rosbag play /home/$USER/vel_charan.bag"; 
-	const char *command = rosbag_cmd.c_str(); 
+	const char *command = rosbag_cmd.c_str();
+
+	// Give feedback
 
 	cout << "Compiling file using " << command << endl; 
 	system(command); 

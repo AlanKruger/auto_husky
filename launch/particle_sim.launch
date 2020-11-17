@@ -1,5 +1,5 @@
 <launch>
-	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find auto_husky)/rviz/particle_sim3.rviz"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find auto_husky)/rviz/object_detector.rviz"/>
 	<node pkg="auto_husky" name="data_play" type="data_play"/>
 	<node pkg="auto_husky" type="particle_tracking" name="particle_tracking" output="screen"/>
 </launch>

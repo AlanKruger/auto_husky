@@ -44,7 +44,11 @@ Demo:
 
 <!--<img src="images/particle_demo2.png" raw=true width="900">-->
 
-<video src="images/auto_husky.mp4" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>
+<!--<video src="images/auto_husky.mp4" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>-->
+
+<video width="1920" height="1080" controls>
+  <source src="images/auto_husky.mp4" type="video/mp4">
+</video>
 
 
 Note: Greyscale particles are raw data. Rainbow particles are filtered particles. Filtetred particles are clustered together. Big squares denote the center of a detected cluster. They are color-coded from green to red such that green represents static or slow objects and red represents high velocity objects.

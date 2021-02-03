@@ -40,9 +40,9 @@ $ roslaunch auto_husky particle_live.launch
 
 Demo:
 
-<img src="images/particle_demo.png" raw=true width="900">
+<!--<img src="images/particle_demo.png" raw=true width="900">-->
 
-<img src="images/particle_demo2.png" raw=true width="900">
+<!--<img src="images/particle_demo2.png" raw=true width="900">-->
 
 <video src="images/auto_husky.mp4" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>
 

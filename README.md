@@ -44,11 +44,11 @@ Demo:
 
 <!--<img src="images/particle_demo2.png" raw=true width="900">-->
 
-<video src="images/output.webm" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>
+<!--<video src="images/output.webm" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>-->
 
-<!--<video width="1920" height="1080" controls>-->
-<!--  <source src="images/auto_husky.mp4" type="video/mp4">-->
-<!--</video>-->
+<video width="1920" height="1080" controls>
+  <source src="images/output.webm" type="video/mp4">
+</video>
 
 <!--![](images/auto_husky.mp4)-->
 

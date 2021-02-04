@@ -46,9 +46,7 @@ Demo:
 
 <!--<video src="images/output.webm" poster="images/particle_demo.png" width="1920" height="1080" controls preload></video>-->
 
-<video width="1920" height="1080" controls>
-  <source src="images/output.webm" type="video/webm">
-</video>
+<img src="images/auto_husky.gif" width="720" height="405" />
 
 <!--![](images/output.webm)-->
 
